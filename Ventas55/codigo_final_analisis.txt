@@ -1,0 +1,128 @@
+import pandas as pd
+import re
+from datetime import datetime, time, date
+import numpy as np
+
+def determinar_tipo_y_convertir(elemento):
+    """
+    Determina el tipo de dato y convierte el elemento al tipo correcto
+    """
+    if pd.isna(elemento) or str(elemento).strip() == '':
+        return 0
+    
+    # LIMPIAR el elemento - quitar comas y espacios
+    elemento_limpio = str(elemento).strip().rstrip(',')
+    
+    # 1. Verificar si es FECHA (DD/MM/AAAA o D/M/AAAA) - YA LIMPIO
+    if re.match(r'^\d{1,2}/\d{1,2}/\d{4}$', elemento_limpio):
+        try:
+            partes = elemento_limpio.split('/')
+            dia, mes, año = int(partes[0]), int(partes[1]), int(partes[2])
+            return datetime(año, mes, dia).date()
+        except ValueError:
+            pass
+    
+    # 2. Verificar si es HORA (HH:MMam/pm, HH:MM, etc.)
+    # Formato 12h con AM/PM
+    patron_12h = re.match(r'^(\d{1,2}):(\d{2})\s*([ap]m)$', elemento_limpio.lower())
+    if patron_12h:
+        try:
+            hora = int(patron_12h.group(1))
+            minuto = int(patron_12h.group(2))
+            periodo = patron_12h.group(3)
+            
+            # Convertir de 12h a 24h
+            if periodo == 'pm' and hora != 12:
+                hora += 12
+            elif periodo == 'am' and hora == 12:
+                hora = 0
+            
+            if 0 <= hora <= 23 and 0 <= minuto <= 59:
+                return time(hora, minuto)
+        except ValueError:
+            pass
+    
+    # Formato 24h
+    patron_24h = re.match(r'^(\d{1,2}):(\d{2})$', elemento_limpio)
+    if patron_24h:
+        try:
+            hora = int(patron_24h.group(1))
+            minuto = int(patron_24h.group(2))
+            if 0 <= hora <= 23 and 0 <= minuto <= 59:
+                return time(hora, minuto)
+        except ValueError:
+            pass
+    
+    # 3. Verificar si es NÚMERO ENTERO (usando elemento_limpio)
+    if elemento_limpio.lstrip('-').isdigit() and elemento_limpio not in ['', '-']:
+        numero = int(elemento_limpio)
+        # Si está entre 30 y 49, convertir a 0
+        if 30 <= numero <= 49:
+            return 0
+        else:
+            return numero
+    
+    # 4. Si no es ninguno de los anteriores, es TEXTO/NOMBRE (devolver el string original SIN COMA)
+    return elemento_limpio
+
+# CÓDIGO PRINCIPAL - UN SOLO BLOQUE
+print("=== PROCESANDO DATAFRAME COMPLETO ===")
+
+# Crear nuevo DataFrame con los datos convertidos (USANDO .map CORRECTAMENTE)
+df_convertido = df.map(determinar_tipo_y_convertir)
+
+# Mostrar información del resultado
+print(f"✓ DataFrame convertido creado: {df_convertido.shape[0]} filas x {df_convertido.shape[1]} columnas")
+
+# Analizar los tipos de datos resultantes (USANDO .map EN LUGAR DE applymap)
+print("\n=== DISTRIBUCIÓN DE TIPOS DE DATOS ===")
+tipos_por_columna = {}
+
+for columna in df_convertido.columns:
+    tipos = df_convertido[columna].map(type).value_counts()
+    tipos_por_columna[columna] = tipos
+    print(f"\nColumna: {columna}")
+    for tipo, cantidad in tipos.items():
+        nombre_tipo = tipo.__name__
+        print(f"  {nombre_tipo}: {cantidad} elementos")
+
+# Mostrar resumen general (USANDO .map EN LUGAR DE applymap)
+print("\n=== RESUMEN GENERAL ===")
+total_elementos = df_convertido.size
+
+# Contar por tipo usando .map
+fechas = df_convertido.map(lambda x: isinstance(x, date)).sum().sum()
+horas = df_convertido.map(lambda x: isinstance(x, time)).sum().sum()
+numeros = df_convertido.map(lambda x: isinstance(x, int) and x != 0).sum().sum()
+ceros = df_convertido.map(lambda x: x == 0).sum().sum()
+textos = df_convertido.map(lambda x: isinstance(x, str)).sum().sum()
+
+print(f"Total elementos procesados: {total_elementos}")
+print(f"Fechas (date): {fechas} ({fechas/total_elementos*100:.1f}%)")
+print(f"Horas (time): {horas} ({horas/total_elementos*100:.1f}%)")
+print(f"Números enteros: {numeros} ({numeros/total_elementos*100:.1f}%)")
+print(f"Elementos en cero: {ceros} ({ceros/total_elementos*100:.1f}%)")
+print(f"Textos/nombres: {textos} ({textos/total_elementos*100:.1f}%)")
+
+# Mostrar ejemplos específicos de fechas para verificar que no tienen coma
+print("\n=== VERIFICACIÓN DE FECHAS LIMPIAS ===")
+fechas_encontradas = False
+for columna in df_convertido.columns:
+    for idx, valor in df_convertido[columna].items():
+        if isinstance(valor, date):
+            # Verificar el valor original para comparar
+            valor_original = df[columna].iloc[idx]
+            print(f"Original: '{valor_original}' → Convertido: {valor} (tipo: date)")
+            fechas_encontradas = True
+            break
+    if fechas_encontradas:
+        break
+
+if not fechas_encontradas:
+    print("No se encontraron fechas en el DataFrame")
+
+print(f"\n✓ Procesamiento completado!")
+print(f"✓ Sin advertencias de deprecated functions")
+print(f"✓ Las comas al final de las fechas han sido eliminadas")
+print(f"✓ DataFrame original conservado como 'df'")
+print(f"✓ DataFrame convertido disponible como 'df_convertido'")

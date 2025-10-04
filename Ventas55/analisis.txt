@@ -1,0 +1,56 @@
+#Las siguientes lineas de código presentan los comandos para revisar algunos parámetros del dataframe final después de aplicar
+#la función "determinar_tipo_y_convertir()"
+# Mostrar información del resultado
+print(f"✓ DataFrame convertido creado: {df_convertido.shape[0]} filas x {df_convertido.shape[1]} columnas")
+
+# Analizar los tipos de datos resultantes
+print("\n=== DISTRIBUCIÓN DE TIPOS DE DATOS ===")
+tipos_por_columna = {}
+
+for columna in df_convertido.columns:
+    tipos = df_convertido[columna].apply(type).value_counts()
+    tipos_por_columna[columna] = tipos
+    print(f"\nColumna: {columna}")
+    for tipo, cantidad in tipos.items():
+        nombre_tipo = tipo.__name__
+        print(f"  {nombre_tipo}: {cantidad} elementos")
+
+# Mostrar resumen general
+print("\n=== RESUMEN GENERAL ===")
+total_elementos = df_convertido.size
+
+# Contar por tipo
+fechas = sum(df_convertido.applymap(lambda x: isinstance(x, date)).sum())
+horas = sum(df_convertido.applymap(lambda x: isinstance(x, time)).sum())
+numeros = sum(df_convertido.applymap(lambda x: isinstance(x, int) and x != 0).sum())
+ceros = sum(df_convertido.applymap(lambda x: x == 0).sum())
+textos = sum(df_convertido.applymap(lambda x: isinstance(x, str)).sum())
+
+print(f"Total elementos procesados: {total_elementos}")
+print(f"Fechas (date): {fechas} ({fechas/total_elementos*100:.1f}%)")
+print(f"Horas (time): {horas} ({horas/total_elementos*100:.1f}%)")
+print(f"Números enteros: {numeros} ({numeros/total_elementos*100:.1f}%)")
+print(f"Elementos en cero: {ceros} ({ceros/total_elementos*100:.1f}%)")
+print(f"Textos/nombres: {textos} ({textos/total_elementos*100:.1f}%)")
+
+# Mostrar ejemplos específicos de fechas para verificar que no tienen coma
+print("\n=== VERIFICACIÓN DE FECHAS LIMPIAS ===")
+fechas_encontradas = False
+for columna in df_convertido.columns:
+    for idx, valor in df_convertido[columna].items():
+        if isinstance(valor, date):
+            # Verificar el valor original para comparar
+            valor_original = df[columna].iloc[idx]
+            print(f"Original: '{valor_original}' → Convertido: {valor} (tipo: date)")
+            fechas_encontradas = True
+            break
+    if fechas_encontradas:
+        break
+
+if not fechas_encontradas:
+    print("No se encontraron fechas en el DataFrame")
+
+print(f"\n✓ Procesamiento completado!")
+print(f"✓ Las comas al final de las fechas han sido eliminadas")
+print(f"✓ DataFrame original conservado como 'df'")
+print(f"✓ DataFrame convertido disponible como 'df_convertido'")

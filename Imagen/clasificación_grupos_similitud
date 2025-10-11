@@ -1,0 +1,248 @@
+# =============================================================================
+# CLASIFICACIÓN DE ZAPATOS DEPORTIVOS POR SIMILITUD VISUAL
+# =============================================================================
+
+# Instalación de paquetes necesarios (ejecutar solo una vez)
+# !pip install tensorflow keras opencv-python pillow scikit-learn pandas numpy matplotlib seaborn
+
+import os
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from PIL import Image
+import cv2
+from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+from sklearn.manifold import TSNE
+from tensorflow.keras.applications import VGG16
+from tensorflow.keras.applications.vgg16 import preprocess_input
+from tensorflow.keras.preprocessing import image
+from tensorflow.keras.models import Model
+import tensorflow as tf
+import warnings
+warnings.filterwarnings('ignore')
+
+# =============================================================================
+# CONFIGURACIÓN PRINCIPAL
+# =============================================================================
+
+# CAMBIA ESTA RUTA por la ubicación de tus imágenes
+IMAGE_DIR = "ruta/a/tu/carpeta/con/imagenes"  
+IMG_SIZE = (224, 224)  # Tamaño requerido por VGG16
+
+# =============================================================================
+# FUNCIONES DE PROCESAMIENTO
+# =============================================================================
+
+def load_and_preprocess_image(img_path):
+    """Carga y preprocesa una imagen para el modelo VGG16"""
+    try:
+        img = Image.open(img_path)
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+        img = img.resize(IMG_SIZE)
+        img_array = np.array(img)
+        img_array = preprocess_input(img_array)
+        return img_array
+    except Exception as e:
+        print(f"Error procesando {img_path}: {e}")
+        return None
+
+def load_images_from_directory(directory):
+    """Carga todas las imágenes del directorio especificado"""
+    image_paths = []
+    image_arrays = []
+    
+    valid_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp'}
+    
+    print("Cargando imágenes...")
+    for filename in os.listdir(directory):
+        if any(filename.lower().endswith(ext) for ext in valid_extensions):
+            img_path = os.path.join(directory, filename)
+            img_array = load_and_preprocess_image(img_path)
+            if img_array is not None:
+                image_paths.append(filename)
+                image_arrays.append(img_array)
+    
+    print(f"✓ Se cargaron {len(image_paths)} imágenes exitosamente")
+    return image_paths, np.array(image_arrays)
+
+def extract_features(images):
+    """Extrae características visuales usando VGG16 pre-entrenado"""
+    print("Extrayendo características de las imágenes...")
+    
+    # Cargar modelo VGG16 sin las capas fully connected
+    base_model = VGG16(weights='imagenet', include_top=False, 
+                       input_shape=(224, 224, 3))
+    
+    # Añadir Global Average Pooling para características compactas
+    x = base_model.output
+    x = tf.keras.layers.GlobalAveragePooling2D()(x)
+    feature_extractor = Model(inputs=base_model.input, outputs=x)
+    
+    # Extraer características
+    features = feature_extractor.predict(images, batch_size=32, verbose=1)
+    print(f"✓ Características extraídas: {features.shape}")
+    return features
+
+def cluster_images(features, n_clusters=50):
+    """Agrupa imágenes por similitud usando K-means"""
+    print("Agrupando imágenes por similitud...")
+    
+    # Reducir dimensionalidad para mejor clustering
+    n_components = min(100, features.shape[1])
+    pca = PCA(n_components=n_components)
+    features_reduced = pca.fit_transform(features)
+    
+    # Aplicar K-means clustering
+    kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+    clusters = kmeans.fit_predict(features_reduced)
+    
+    print(f"✓ Imágenes agrupadas en {len(np.unique(clusters))} grupos")
+    return clusters
+
+def visualize_results(features, clusters, image_paths, results_df, directory):
+    """Visualiza los resultados del clustering"""
+    
+    # Reducción para visualización 2D
+    print("Generando visualizaciones...")
+    tsne = TSNE(n_components=2, random_state=42, perplexity=30)
+    features_2d = tsne.fit_transform(features)
+    
+    # 1. Gráfico de dispersión de clusters
+    plt.figure(figsize=(15, 5))
+    
+    plt.subplot(1, 2, 1)
+    scatter = plt.scatter(features_2d[:, 0], features_2d[:, 1], 
+                         c=clusters, cmap='tab20', alpha=0.7, s=10)
+    plt.colorbar(scatter)
+    plt.title('Distribución de Clusters de Zapatos Deportivos\n(t-SNE)')
+    plt.xlabel('Componente t-SNE 1')
+    plt.ylabel('Componente t-SNE 2')
+    
+    # 2. Distribución de tamaños de clusters
+    plt.subplot(1, 2, 2)
+    cluster_sizes = results_df['grupo_similitud'].value_counts()
+    plt.hist(cluster_sizes, bins=30, alpha=0.7, edgecolor='black')
+    plt.title('Distribución de Tamaños de Grupos')
+    plt.xlabel('Número de Imágenes por Grupo')
+    plt.ylabel('Frecuencia')
+    
+    plt.tight_layout()
+    plt.show()
+    
+    # 3. Mostrar ejemplos de cada cluster
+    print("\nMostrando ejemplos de clusters...")
+    unique_clusters = np.unique(clusters)
+    n_clusters_to_show = min(12, len(unique_clusters))
+    
+    fig, axes = plt.subplots(3, 4, figsize=(20, 15))
+    axes = axes.ravel()
+    
+    for i, cluster_id in enumerate(unique_clusters[:n_clusters_to_show]):
+        cluster_images = results_df[results_df['grupo_similitud'] == cluster_id]
+        if len(cluster_images) > 0:
+            # Tomar la primera imagen del cluster como ejemplo
+            sample_img = cluster_images.iloc[0]['archivo']
+            img_path = os.path.join(directory, sample_img)
+            
+            try:
+                img = Image.open(img_path)
+                axes[i].imshow(img)
+                axes[i].set_title(f'Grupo {cluster_id}\n({len(cluster_images)} imágenes)')
+                axes[i].axis('off')
+            except:
+                axes[i].text(0.5, 0.5, f'Error\nGrupo {cluster_id}', 
+                           ha='center', va='center', transform=axes[i].transAxes)
+                axes[i].axis('off')
+    
+    # Ocultar ejes vacíos si hay menos de 12 clusters
+    for j in range(i + 1, len(axes)):
+        axes[j].axis('off')
+    
+    plt.tight_layout()
+    plt.show()
+
+# =============================================================================
+# EJECUCIÓN PRINCIPAL
+# =============================================================================
+
+def main():
+    """Función principal que ejecuta todo el pipeline"""
+    
+    # 1. Cargar imágenes
+    image_paths, image_arrays = load_images_from_directory(IMAGE_DIR)
+    
+    if len(image_paths) == 0:
+        print("❌ No se encontraron imágenes en el directorio especificado")
+        return None
+    
+    # 2. Extraer características
+    features = extract_features(image_arrays)
+    
+    # 3. Calcular número de clusters (aproximadamente 1 grupo cada 50-100 imágenes)
+    n_clusters = max(10, min(100, len(image_paths) // 50))
+    print(f"📊 Usando {n_clusters} clusters para {len(image_paths)} imágenes")
+    
+    # 4. Agrupar imágenes por similitud
+    clusters = cluster_images(features, n_clusters=n_clusters)
+    
+    # 5. Crear DataFrame con resultados
+    results_df = pd.DataFrame({
+        'archivo': image_paths,
+        'grupo_similitud': clusters
+    })
+    
+    # Ordenar por grupo para mejor organización
+    results_df = results_df.sort_values('grupo_similitud').reset_index(drop=True)
+    
+    # 6. Mostrar estadísticas
+    cluster_stats = results_df['grupo_similitud'].value_counts().sort_index()
+    
+    print("\n" + "="*50)
+    print("📈 ESTADÍSTICAS FINALES")
+    print("="*50)
+    print(f"Total de imágenes procesadas: {len(results_df)}")
+    print(f"Total de grupos creados: {len(cluster_stats)}")
+    print(f"Tamaño promedio del grupo: {cluster_stats.mean():.1f} imágenes")
+    print(f"Grupo más grande: {cluster_stats.max()} imágenes")
+    print(f"Grupo más pequeño: {cluster_stats.min()} imágenes")
+    print(f"Grupos con 10+ imágenes: {len(cluster_stats[cluster_stats >= 10])}")
+    print(f"Grupos con 20+ imágenes: {len(cluster_stats[cluster_stats >= 20])}")
+    
+    # 7. Visualizar resultados
+    visualize_results(features, clusters, image_paths, results_df, IMAGE_DIR)
+    
+    # 8. Guardar resultados
+    output_file = 'clasificacion_tenis_por_similitud.csv'
+    results_df.to_csv(output_file, index=False, encoding='utf-8')
+    print(f"\n💾 Resultados guardados en: {output_file}")
+    
+    # 9. Mostrar preview del DataFrame
+    print("\n📋 Vista previa del DataFrame:")
+    print(results_df.head(15))
+    
+    return results_df
+
+# =============================================================================
+# EJECUTAR EL PROGRAMA
+# =============================================================================
+
+if __name__ == "__main__":
+    # ¡IMPORTANTE! Cambia la siguiente ruta por la ubicación de tus imágenes
+    IMAGE_DIR = "ruta/a/tu/carpeta/con/imagenes"  # ← CAMBIAR ESTA RUTA
+    
+    print("🚀 INICIANDO CLASIFICACIÓN DE ZAPATOS DEPORTIVOS")
+    print("="*60)
+    
+    resultados = main()
+    
+    if resultados is not None:
+        print("\n✅ ¡Proceso completado exitosamente!")
+        print("📊 Los grupos representan zapatos visualmente similares:")
+        print("   - Mismo grupo = Mismo estilo/referencia (ej: Nike Air Force 1 blancas)")
+        print("   - Grupos diferentes = Estilos/referencias diferentes")
+    else:
+        print("\n❌ Error en el proceso. Verifica la ruta de las imágenes.")

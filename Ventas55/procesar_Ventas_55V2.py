@@ -192,7 +192,7 @@ if __name__ == "__main__":
             # -------------------------------
             # Guardar en Excel
             # -------------------------------
-            nombre_excel = f"resumen_precios_{FECHA_HOY}.xlsx"
+            nombre_excel = f"informe_{FECHA_HOY}.xlsx"
             ruta_excel = os.path.join(OUTPUT_DIR, nombre_excel)
 
             with pd.ExcelWriter(ruta_excel, engine='openpyxl', datetime_format='yyyy-mm-dd hh:mm:ss') as writer:

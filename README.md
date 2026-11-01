@@ -94,5 +94,5 @@ python clasificar_carpeta.py    # clasifica una carpeta de fotos nuevas
 ## Notas
 
 - Es un repositorio de **aprendizaje**: hay varias versiones de un mismo script y archivos intermedios.
-- Los archivos de datos de ejemplo (`datos*.txt`) contienen nombres de personas reales de los chats. Si el repositorio es público, conviene anonimizarlos.
+- Los nombres de las personas de los chats se reemplazaron por *Vendedora 1* y *Vendedora 2* en los datos de ejemplo, cuadernos y archivos Excel.
 - `identificacion_imagen.ipynb` pesa unos 5,7 MB porque guarda las imágenes en las salidas; puede limpiar las salidas para que cargue más rápido.
